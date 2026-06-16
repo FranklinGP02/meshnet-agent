@@ -30,6 +30,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 app = typer.Typer(help="Agente MeshNet — comparte tu cómputo y acumula créditos MESH.")
 
 
+def _describe_http_error(exc: httpx.HTTPError) -> str:
+    """Incluye el cuerpo de la respuesta del coordinador en el mensaje: sin esto,
+    un 422 solo dice 'Unprocessable Entity' sin decir qué campo falló la
+    validación, lo que vuelve indepurable cualquier error de schema."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        body = exc.response.text[:1000]
+        return f"{exc}\nRespuesta del servidor: {body}"
+    return str(exc)
+
+
 def _benchmark_runner(stub: bool) -> BenchmarkRunner:
     """Runner real (llama-bench con el 3B) o stub determinista para dev/CI."""
     if stub:
@@ -111,7 +121,7 @@ def register(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        typer.secho(f"register falló: {exc}", fg=typer.colors.RED, err=True)
+        typer.secho(f"register falló: {_describe_http_error(exc)}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
     data = response.json()
@@ -209,7 +219,9 @@ def benchmark(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        typer.secho(f"rebenchmark falló: {exc}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"rebenchmark falló: {_describe_http_error(exc)}", fg=typer.colors.RED, err=True
+        )
         raise typer.Exit(code=1) from exc
     typer.secho(
         f"power_factor actualizado a {response.json()['power_factor']}", fg=typer.colors.GREEN
