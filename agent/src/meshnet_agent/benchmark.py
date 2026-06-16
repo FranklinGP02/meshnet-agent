@@ -84,7 +84,22 @@ class LlamaCppBenchmarkRunner:
             "-o",
             "json",
         ]
-        result = subprocess.run(argv, capture_output=True, text=True, check=True, timeout=600)
+        try:
+            result = subprocess.run(argv, capture_output=True, text=True, check=True, timeout=600)
+        except subprocess.CalledProcessError as exc:
+            # CalledProcessError SÍ trae stdout/stderr, pero el traceback por
+            # defecto no los muestra: sin esto, un fallo de llama-bench se ve
+            # como "exit status 1" sin ninguna pista de la causa real (DLL
+            # faltante, instrucción de CPU no soportada, modelo corrupto...).
+            raise RuntimeError(
+                f"llama-bench salió con código {exc.returncode}.\n"
+                f"--- stdout ---\n{exc.stdout}\n"
+                f"--- stderr ---\n{exc.stderr}"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"llama-bench no respondió en {exc.timeout}s (colgado o muy lento)."
+            ) from exc
         return _parse_llama_bench_tps(result.stdout)
 
 
