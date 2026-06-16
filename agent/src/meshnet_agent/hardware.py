@@ -35,11 +35,36 @@ def _gpu_static() -> tuple[str | None, float | None]:
         return None, None
 
 
+def _cpu_name() -> str:
+    """Nombre comercial de la CPU (p.ej. "AMD Ryzen 7 5800X 8-Core Processor").
+
+    En Windows, platform.processor() solo da la firma de familia/modelo/stepping
+    (p.ej. "AMD64 Family 25 Model 117 Stepping 2, AuthenticAMD"), que es IDÉNTICA
+    entre CPUs distintas de la misma generación — en el dashboard, dos PCs con
+    CPUs diferentes pero de la misma gama aparentan tener "el mismo hardware".
+    Se lee el nombre real del registro; si falla, se degrada al valor genérico
+    (nunca debe romper el registro del nodo por esto)."""
+    if platform.system() == "Windows":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+            )
+            name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+            name = str(name).strip()
+            if name:
+                return name
+        except OSError as exc:
+            log.debug("no se pudo leer ProcessorNameString del registro: %s", exc)
+    return platform.processor() or platform.machine()
+
+
 def detect_hardware() -> HardwareInfo:
     gpu, vram_gb = _gpu_static()
     return HardwareInfo(
         os_name=f"{platform.system()} {platform.release()}",
-        cpu=platform.processor() or platform.machine(),
+        cpu=_cpu_name(),
         ram_gb=round(psutil.virtual_memory().total / _GB, 2),
         gpu=gpu,
         vram_gb=vram_gb,
