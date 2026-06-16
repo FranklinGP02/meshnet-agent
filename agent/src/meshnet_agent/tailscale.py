@@ -9,6 +9,7 @@ Las claves del JSON pueden variar entre versiones de Tailscale: parseo defensivo
 
 import json
 import logging
+import re
 import subprocess
 
 from meshnet_shared.constants import ConnectionMode
@@ -16,6 +17,8 @@ from meshnet_shared.constants import ConnectionMode
 log = logging.getLogger("meshnet.tailscale")
 
 _TIMEOUT_S = 10.0
+_PING_RTT_RE = re.compile(r"\bin (?P<ms>\d+(?:\.\d+)?)ms\b")
+_PING_DERP_RE = re.compile(r"\bvia DERP\b")
 
 
 def parse_self_ip(status_json: str) -> str | None:
@@ -73,3 +76,36 @@ def detect_self_ip() -> str | None:
 def detect_peer_modes() -> dict[str, ConnectionMode]:
     status = _run_status()
     return parse_peer_modes(status) if status else {}
+
+
+def parse_ping(output: str) -> tuple[float, ConnectionMode] | None:
+    """RTT (ms) + modo direct/relay desde la salida de `tailscale ping`.
+
+    None si no hubo pong (host inalcanzable, timeout, salida inesperada)."""
+    if "pong from" not in output:
+        return None
+    m = _PING_RTT_RE.search(output)
+    if not m:
+        return None
+    mode = ConnectionMode.RELAY if _PING_DERP_RE.search(output) else ConnectionMode.DIRECT
+    return float(m.group("ms")), mode
+
+
+def ping(ip: str, timeout_s: float = _TIMEOUT_S) -> tuple[float, ConnectionMode] | None:
+    """RTT real + modo (direct/relay) a un peer del tailnet vía `tailscale ping`.
+
+    A diferencia de un TCP connect a un puerto de la app, esto NO depende de que
+    el peer tenga nada propio escuchando — funciona incluso antes de que exista
+    ningún clúster (rpc-server solo se arranca DENTRO de un clúster ya formado,
+    así que medir contra ese puerto nunca daría señal para el primer clúster)."""
+    try:
+        result = subprocess.run(
+            ["tailscale", "ping", "-c", "1", ip],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        log.debug("tailscale ping a %s falló: %s", ip, exc)
+        return None
+    return parse_ping(result.stdout)

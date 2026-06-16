@@ -99,11 +99,7 @@ def run_loop(
             start = monotonic()
             try:
                 if state and peer_directory:
-                    from meshnet_agent.tailscale import detect_peer_modes
-
-                    latencies = measure_peer_latencies(
-                        peer_directory, peer_modes=detect_peer_modes()
-                    )
+                    latencies = measure_peer_latencies(peer_directory)
                 else:
                     latencies = ()
                 recent_logs = log_handler.drain() if log_handler else ()

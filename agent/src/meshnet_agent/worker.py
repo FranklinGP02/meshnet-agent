@@ -6,47 +6,37 @@ el planner forme clústeres geo-conscientes. Nunca propaga errores (un peer
 inalcanzable se omite, no tumba el loop)."""
 
 import logging
-import socket
 import time
 from collections.abc import Callable
 
 import httpx
 
+from meshnet_agent import tailscale
 from meshnet_agent.config import AgentConfig
 from meshnet_agent.roles import AgentState
-from meshnet_shared.constants import RPC_PORT, ConnectionMode, NodeRole
+from meshnet_shared.constants import ConnectionMode, NodeRole
 from meshnet_shared.schemas import JobPayload, JobResultRequest, PeerInfo, PeerLatency
 
 log = logging.getLogger("meshnet.worker")
 
-_PROBE_TIMEOUT_S = 2.0
-
-
-def _measure_one(ip: str, port: int) -> float | None:
-    """RTT aproximado vía tiempo de establecimiento TCP (ms), o None si falla."""
-    start = time.monotonic()
-    try:
-        with socket.create_connection((ip, port), timeout=_PROBE_TIMEOUT_S):
-            return (time.monotonic() - start) * 1000.0
-    except OSError:
-        return None
-
 
 def measure_peer_latencies(
     peer_directory: tuple[PeerInfo, ...],
-    port: int = RPC_PORT,
-    peer_modes: dict[str, ConnectionMode] | None = None,
+    ping_fn: Callable[[str], tuple[float, ConnectionMode] | None] = tailscale.ping,
 ) -> tuple[PeerLatency, ...]:
-    """Mide RTT a cada peer y etiqueta el modo (direct/relay) de Tailscale. Ante
-    modo desconocido cae a RELAY (conservador: el planner penaliza relay, ADR-009)."""
-    modes = peer_modes if peer_modes is not None else {}
+    """Mide RTT real + modo direct/relay a cada peer vía `tailscale ping`.
+
+    Importante: NO se mide conectando a un puerto de la app (p.ej. RPC_PORT),
+    porque ese puerto solo se abre DENTRO de un clúster ya formado — medir así
+    nunca daría señal para formar el PRIMER clúster (bloqueo circular).
+    `tailscale ping` mide la red real sin depender de nada de la app."""
     out: list[PeerLatency] = []
     for peer in peer_directory:
-        rtt = _measure_one(peer.tailscale_ip, port)
-        if rtt is None:
+        measured = ping_fn(peer.tailscale_ip)
+        if measured is None:
             log.debug("peer %d (%s) inalcanzable; se omite", peer.node_id, peer.tailscale_ip)
             continue  # peer inalcanzable: se omite (no se inventa latencia)
-        mode = modes.get(peer.tailscale_ip, ConnectionMode.RELAY)
+        rtt, mode = measured
         out.append(PeerLatency(node_id=peer.node_id, rtt_ms=rtt, connection=mode))
     if peer_directory and not out:
         log.warning("ningún peer alcanzable de %d; heartbeat sin latencias", len(peer_directory))
