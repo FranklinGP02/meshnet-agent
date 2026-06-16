@@ -63,7 +63,10 @@ def send_heartbeat(
 ) -> HeartbeatResponse:
     response = client.post(
         "/api/v1/nodes/heartbeat",
-        headers={"Authorization": f"Bearer {api_key}"},
+        # content= no añade Content-Type por sí solo; sin esto el coordinador
+        # devuelve 422 ("Input should be a valid dictionary") en vez de aceptar
+        # el heartbeat — verificado en producción (mismo bug que en register).
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         content=payload.model_dump_json(),
     )
     response.raise_for_status()

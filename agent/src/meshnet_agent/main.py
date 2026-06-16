@@ -117,6 +117,10 @@ def register(
         response = httpx.post(
             f"{coordinator_url}/api/v1/nodes/register",
             content=request.model_dump_json(),
+            # content= NO añade Content-Type por sí solo (a diferencia de json=);
+            # sin esto el coordinador no reconoce el body como JSON y devuelve 422
+            # "Input should be a valid dictionary" — verificado en producción.
+            headers={"Content-Type": "application/json"},
             timeout=30.0,
         )
         response.raise_for_status()
@@ -214,7 +218,10 @@ def benchmark(
         response = httpx.post(
             f"{config.coordinator_url}/api/v1/nodes/rebenchmark",
             content=result.model_dump_json(),
-            headers={"Authorization": f"Bearer {config.api_key}"},
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "Content-Type": "application/json",
+            },
             timeout=30.0,
         )
         response.raise_for_status()

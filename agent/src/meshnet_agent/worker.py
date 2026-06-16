@@ -57,6 +57,9 @@ def _poll_once(client: httpx.Client, config: AgentConfig, state: AgentState) -> 
     """Un ciclo de long-poll: pide un job, lo ejecuta y reporta. Devuelve True si
     procesó un job. Nunca propaga: el agente jamás muere por un job que falla."""
     headers = {"Authorization": f"Bearer {config.api_key}"}
+    # content= no añade Content-Type por sí solo; sin esto el POST del resultado
+    # devolvería 422 igual que register/heartbeat (mismo bug, mismo origen).
+    post_headers = {**headers, "Content-Type": "application/json"}
     try:
         resp = client.get("/api/v1/jobs/next", params={"wait": 20}, headers=headers)
         if resp.status_code == httpx.codes.NO_CONTENT:
@@ -89,7 +92,7 @@ def _poll_once(client: httpx.Client, config: AgentConfig, state: AgentState) -> 
             r = client.post(
                 f"/api/v1/jobs/{job.job_id}/result",
                 content=result.model_dump_json(),
-                headers=headers,
+                headers=post_headers,
             )
             r.raise_for_status()
             return True
