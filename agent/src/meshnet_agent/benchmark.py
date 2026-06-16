@@ -16,7 +16,6 @@ from meshnet_shared.constants import (
     BENCHMARK_MODEL,
     BENCHMARK_N_PREDICT,
     BENCHMARK_RUNS,
-    BENCHMARK_SEED,
     BENCHMARK_VERSION,
 )
 from meshnet_shared.schemas import BenchmarkResult
@@ -77,8 +76,10 @@ class LlamaCppBenchmarkRunner:
             "0",  # sin prompt eval; solo generación
             "-n",
             str(BENCHMARK_N_PREDICT),
-            "--seed",
-            str(BENCHMARK_SEED),
+            # Sin --seed: el binario real (ADR-007, pinned a LLAMACPP_VERSION)
+            # no lo soporta en llama-bench — "invalid parameter for argument:
+            # --seed" (verificado con --help). BENCHMARK_SEED queda en
+            # constants.py por si una versión futura lo reintroduce.
             "-r",
             "1",  # una repetición interna; la mediana la hace run_benchmark
             "-o",
