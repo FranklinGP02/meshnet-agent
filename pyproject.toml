@@ -1,0 +1,16 @@
+[project]
+name = "meshnet-agent-workspace"
+version = "0.0.0"
+description = "Workspace raíz para instalar meshnet-agent (raíz virtual, no se publica)"
+requires-python = ">=3.11"
+dependencies = ["meshnet-shared", "meshnet-agent"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["shared", "agent"]
+
+[tool.uv.sources]
+meshnet-shared = { workspace = true }
+meshnet-agent = { workspace = true }
