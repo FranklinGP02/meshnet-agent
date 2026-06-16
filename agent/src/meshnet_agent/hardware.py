@@ -46,8 +46,16 @@ def _cpu_name() -> str:
     (nunca debe romper el registro del nodo por esto)."""
     if platform.system() == "Windows":
         try:
-            import winreg
+            # importlib.import_module en vez de "import winreg": typeshed solo
+            # expone los miembros de winreg cuando mypy resuelve para
+            # sys.platform == "win32" — en el runner ubuntu-latest de la matriz
+            # CI el stub aparece vacío (attr-defined). import_module() devuelve
+            # ModuleType, cuyos atributos tipan Any en typeshed: evita el error
+            # SIN type:ignore (que además mypy marcaría "no usado" en Windows,
+            # donde sí hay atributos — strict=True lo trataría como error).
+            import importlib
 
+            winreg = importlib.import_module("winreg")
             key = winreg.OpenKey(
                 winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
             )
