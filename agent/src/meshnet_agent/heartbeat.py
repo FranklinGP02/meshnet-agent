@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import httpx
 
+from meshnet_agent import tailscale
 from meshnet_agent.config import AgentConfig
 from meshnet_agent.hardware import read_metrics
 from meshnet_agent.logbuffer import RingLogHandler
@@ -42,6 +43,7 @@ def build_heartbeat(
     state: AgentState | None = None,
     peer_latencies: tuple[PeerLatency, ...] = (),
     recent_logs: tuple[LogLine, ...] = (),
+    tailscale_ip: str | None = None,
 ) -> HeartbeatRequest:
     m = read_metrics()
     return HeartbeatRequest(
@@ -55,6 +57,7 @@ def build_heartbeat(
         peer_latencies=peer_latencies,
         llama_proc_alive=state.llama_proc_alive if state else False,
         recent_logs=recent_logs,
+        tailscale_ip=tailscale_ip,
     )
 
 
@@ -103,8 +106,15 @@ def run_loop(
                 else:
                     latencies = ()
                 recent_logs = log_handler.drain() if log_handler else ()
+                # Detectada en cada ciclo (no solo al registrar): la IP de
+                # Tailscale puede cambiar (reinstalación, cambio de cuenta/red) y
+                # el coordinador debe enterarse, o sigue repartiendo a los peers
+                # una IP muerta para siempre (bloquea cualquier clúster).
+                current_ip = tailscale.detect_self_ip()
                 response = send_heartbeat(
-                    client, config.api_key, build_heartbeat(state, latencies, recent_logs)
+                    client,
+                    config.api_key,
+                    build_heartbeat(state, latencies, recent_logs, current_ip),
                 )
                 if state is not None:
                     state.apply_commands(response.commands)

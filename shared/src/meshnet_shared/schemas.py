@@ -95,6 +95,11 @@ class HeartbeatRequest(_FrozenModel):
     cluster_id: int | None = None
     peer_latencies: tuple[PeerLatency, ...] = ()
     llama_proc_alive: bool = False
+    # IP de Tailscale detectada en este heartbeat. La del registro es una foto
+    # fija que puede quedar obsoleta (cambio de cuenta/red de Tailscale, etc.);
+    # sin esto el coordinador sigue dando a los peers una IP muerta para
+    # siempre, bloqueando la formación de cualquier clúster (visto en producción).
+    tailscale_ip: str | None = None
     # Telemetría de logs: cap a nivel schema para que el coordinador no procese
     # un payload gigante de un agente comprometido.
     recent_logs: tuple[LogLine, ...] = Field(default=(), max_length=MAX_LOG_LINES_PER_HEARTBEAT)
