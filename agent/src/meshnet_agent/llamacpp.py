@@ -131,7 +131,11 @@ class SubprocessLlamaManager:
         self, model: str, rpc_peers: tuple[str, ...], layer_split: tuple[int, ...]
     ) -> None:
         spec = ProcSpec(kind="head", model=model, rpc_peers=rpc_peers, layer_split=layer_split)
-        if self._spec == spec and self.is_alive():
+        # is_alive() devuelve True SOLO cuando /health=200 (modelo cargado). Durante la
+        # carga (503) el proceso sigue corriendo pero aún no sirve peticiones — no
+        # reiniciarlo o entraría en un loop matando el modelo cada 20s.
+        proc_running = self._proc is not None and self._proc.poll() is None
+        if self._spec == spec and proc_running:
             return
         self.stop()
         try:
